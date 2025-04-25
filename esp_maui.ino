@@ -2,7 +2,7 @@
 #include <WebServer.h>
 // --- Incluir librerías para WebSockets y JSON ---
 #include <ArduinoJson.h> // Para manejar JSON
-#include <WebSockets_Generic.h> // <--- ¡CORRECCIÓN AQUÍ! 'S' mayúscula en WebSockets
+#include <WebSockets_Generic.h> // Usamos el nombre del archivo de cabecera correcto
 
 // Define el nombre de la red (SSID) y la contraseña para el AP del ESP32
 const char* ap_ssid = "MiESP32_AP";
@@ -23,7 +23,7 @@ const int websocketPort = 443; // Puerto (443 para wss://, 80 para ws://)
 const char* websocketPath = "/myhub"; // Ruta al Hub de SignalR
 
 // Creamos un objeto cliente de WebSockets
-WebSocketsClient webSocket;
+WebSockets webSocket; // <--- ¡CAMBIO AQUÍ! Usamos el tipo 'WebSockets'
 
 // Bandera para saber si el cliente WebSocket esta conectado y si la negociacion SignalR se completo
 bool isWebSocketConnected = false;
@@ -70,7 +70,7 @@ void setup() {
   Serial.println("Esperando credenciales WiFi...");
 
   // Configurar el manejador de eventos de WebSocket
-  webSocket.onEvent(webSocketEvent);
+  webSocket.onEvent(webSocketEvent); // <--- Usamos el objeto 'webSocket'
   // Para SSL/TLS (wss://) necesitas configurar la huella digital del certificado o deshabilitar la validacion (NO recomendado en produccion)
   // webSocket.setExtraHeaders("Origin: ws://localhost"); // Puede ser necesario depending on server config
 }
@@ -80,19 +80,14 @@ void loop() {
 
   // Ejecutar el loop de WebSocket para procesar la comunicacion
   if (WiFi.status() == WL_CONNECTED) {
-    webSocket.loop(); // Importante llamar esto para que WebSocket procese mensajes y mantenga la conexion
+    webSocket.loop(); // <--- Usamos el objeto 'webSocket'
     // Añadir un pequeño delay para evitar saturar el procesador del ESP32
     delay(1);
   } else {
-      // Si no estamos conectados al WiFi local, pero si recibimos credenciales,
-      // la funcion connectToWiFi() se llamara desde aqui en el proximo loop.
-      // Si ya estamos esperando credenciales, la funcion handleConfig actualiza la bandera.
-  }
-
-
-  if (credentialsReceived) {
-    connectToWiFi(); // Intentar conectar a la red local (esto detiene el servidor AP)
-    credentialsReceived = false;
+      if (credentialsReceived) { // Mantenemos la logica de intentar conectar a WiFi si se recibieron credenciales
+          connectToWiFi();
+          credentialsReceived = false;
+      }
   }
 
   // Otras tareas del ESP32
@@ -120,7 +115,7 @@ void handleRoot() {
 }
 
 // --- Función para conectar al WiFi ---
-// (Sin cambios significativos, solo se cambia la llamada a connectToSignalR)
+// (Sin cambios significativos)
 
 void connectToWiFi() {
   Serial.print("Intentando conectar a WiFi: "); Serial.println(target_ssid);
@@ -138,9 +133,8 @@ void connectToWiFi() {
     WiFi.softAPdisconnect(true);
     Serial.println("Modo AP desactivado.");
 
-    // --- ¡Ahora que tenemos WiFi, iniciamos la NEGOCIACION de SignalR! ---
-    delay(1000); // Espera un poco
-    connectToSignalR(); // <--- Llama a la funcion que inicia la negociacion HTTP
+    delay(1000);
+    connectToSignalR();
   } else {
     Serial.println("\nError al conectar a WiFi.");
     Serial.println("Verifica el SSID y la contrasena.");
@@ -150,7 +144,6 @@ void connectToWiFi() {
 }
 
 // --- Función para iniciar la NEGOCIACION HTTP de SignalR ---
-// SignalR primero hace una peticion HTTP GET a /hubpath/negotiate
 void connectToSignalR() {
   Serial.print("Iniciando negociacion SignalR via HTTP GET a: ");
   Serial.print(websocketHost); Serial.print(signalrNegotiatePath); Serial.println("...");
@@ -158,13 +151,10 @@ void connectToSignalR() {
   WiFiClientSecure client; // Usar WiFiClientSecure para HTTPS (recomendado para Render)
 
   // *** Para HTTPS/SSL (wss://), necesitas validar el certificado ***
-  // En un entorno de desarrollo, a veces se deshabilita temporalmente para pruebas (NO SEGURO)
-  // client.setInsecure(); // Deshabilita la validacion del certificado (NO HACER ESTO EN PRODUCCION)
-  // O usa client.setCACert() y client.setCertificate()/setPrivateKey() si tienes los archivos.
-  // Para Render, es mas probable que necesites la huella digital del certificado si no validas con CA root certificates.
-  // client.setFingerprint("YOUR_FINGERPRINT"); // Ejemplo: client.setFingerprint("A1 B2 C3 D4 E5 F6...");
+  // client.setInsecure(); // Deshabilita la validacion del certificado (NO SEGURO)
+  // client.setFingerprint("YOUR_FINGERPRINT"); // Ejemplo para validacion por huella
 
-  if (!client.connect(websocketHost, websocketPort)) { // Conectar via TCP/SSL
+  if (!client.connect(websocketHost, websocketPort)) {
     Serial.println("Error de conexion TCP/SSL para negociacion.");
     Serial.print("Verifica host ("); Serial.print(websocketHost);
     Serial.print("), puerto ("); Serial.print(websocketPort);
@@ -200,7 +190,7 @@ void connectToSignalR() {
 
   Serial.print("Cuerpo JSON de negociacion: "); Serial.println(jsonResponse);
 
-  StaticJsonDocument doc;
+  StaticJsonDocument doc; // Capacidad para el documento JSON
   DeserializationError error = deserializeJson(doc, jsonResponse);
 
   if (error) {
@@ -210,7 +200,6 @@ void connectToSignalR() {
   }
 
   const char* connectionId = doc["connectionId"];
-  // int negotiatedVersion = doc["negotiatedVersion"];
 
   if (connectionId) {
     signalrConnectionId = connectionId;
@@ -237,17 +226,15 @@ void startWebSocket(const char* connectionId) {
     // Iniciar la conexion WebSocket
     // begin(host, port, path, protocol, extraHeaders, fingerprint, reconnectInterval)
     // Para SSL/TLS (wss), usa puerto 443.
-    // Puedes necesitar configuracion SSL/TLS adicional para WebSocketsClient (setCACert, setFingerprint, etc.)
-    // http://arduino-websocketclient.readthedocs.io/en/latest/
-    webSocket.begin(websocketHost, websocketPort, websocketUrl.c_str(), "protocol", "", ""); // Últimos 2: protocol y extraHeaders
+    webSocket.begin(websocketHost, websocketPort, websocketUrl.c_str(), "", ""); // Últimos 2: protocol y extraHeaders (protocol vacio por ahora)
 
-    // Si usas SSL, verifica la documentacion de WebSocketsClient para habilitar SSL/TLS.
-    // A menudo es un parametro booleano en el metodo begin o una llamada a setSSL/setSecure.
+    // Si usas SSL, necesitas habilitar SSL/TLS en WebSocketsClient
+    // Busca en la documentacion de WebSocketsClient: setSSL(), setSecure(), etc.
     // webSocket.setSecure(); // <-- Esto podría ser necesario para wss://
 
     Serial.println("Inicio de conexion WebSocket exitoso. Esperando eventos (WS_EVT_CONNECT, WS_EVT_DATA, etc.)...");
-    isWebSocketConnected = true; // Consideramos que el intento de conexion inicio
-    isSignalRNegotiated = true; // La negociacion ya se completo
+    isWebSocketConnected = true;
+    isSignalRNegotiated = true;
 }
 
 
@@ -269,7 +256,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
             Serial.print("WebSocket Texto recibido: ");
             Serial.println((char*)payload);
 
-            StaticJsonDocument doc;
+            StaticJsonDocument doc; // Capacidad para el documento JSON
             DeserializationError error = deserializeJson(doc, (char*)payload);
 
             if (error) {
@@ -278,40 +265,44 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
                 return;
             }
 
-            int messageType = doc["type"];
+            // Manejo basico de mensajes SignalR (Ping/Pong y Invocation)
+            if (!doc.isNull()) {
+                int messageType = doc["type"];
 
-            if (messageType == 1) { // Type 1: Invocation
-                 const char* target = doc["target"];
-                 JsonArray arguments = doc["arguments"].as<JsonArray>();
+                if (messageType == 1) { // Type 1: Invocation (API llama a metodo en cliente)
+                     const char* target = doc["target"];
+                     JsonArray arguments = doc["arguments"].as<JsonArray>(); // Obtener array de argumentos
 
-                 Serial.print("  SignalR Invocation - Target: "); Serial.println(target);
+                     Serial.print("  SignalR Invocation - Target: "); Serial.println(target);
 
-                 if (strcmp(target, "ReceiveMessage") == 0) {
-                     if (arguments.size() == 2) {
-                         String user = arguments[0].as<String>();
-                         String message = arguments[1].as<String>();
-                         Serial.print("    De: "); Serial.println(user);
-                         Serial.print("    Mensaje: "); Serial.println(message);
+                     if (strcmp(target, "ReceiveMessage") == 0) {
+                         if (arguments.size() == 2) {
+                             String user = arguments[0].as<String>();
+                             String message = arguments[1].as<String>();
+                             Serial.print("    De: "); Serial.println(user);
+                             Serial.print("    Mensaje: "); Serial.println(message);
 
-                         if (user.equals("App")) {
-                             Serial.print("     Comando desde App: "); Serial.println(message);
-                             // if (message.equals("ON_LED")) { digitalWrite(LED_BUILTIN, HIGH); }
-                             // else if (message.equals("OFF_LED")) { digitalWrite(LED_BUILTIN, LOW); }
+                             if (user.equals("App")) {
+                                 Serial.print("     Comando desde App: "); Serial.println(message);
+                                 // if (message.equals("ON_LED")) { digitalWrite(LED_BUILTIN, HIGH); }
+                                 // else if (message.equals("OFF_LED")) { digitalWrite(LED_BUILTIN, LOW); }
+                             }
                          }
                      }
-                 }
-                 else if (strcmp(target, "ControlPin") == 0) {
-                    if (arguments.size() == 2) {
-                        int pin = arguments[0].as<int>();
-                        int value = arguments[1].as<int>();
-                        Serial.print("    Comando Pin: "); Serial.print(pin);
-                        Serial.print("    Valor: "); Serial.println(value);
-                        // digitalWrite(pin, value);
-                    }
-                 }
+                     else if (strcmp(target, "ControlPin") == 0) {
+                        if (arguments.size() == 2) {
+                            int pin = arguments[0].as<int>();
+                            int value = arguments[1].as<int>();
+                            Serial.print("    Comando Pin: "); Serial.print(pin);
+                            Serial.print("    Valor: "); Serial.println(value);
+                            // digitalWrite(pin, value);
+                        }
+                     }
 
-            } else if (messageType == 6) { // Type 6: Ping/Pong
-                 Debug.println("SignalR Ping recibido.");
+                } else if (messageType == 6) { // Type 6: Ping/Pong
+                     Serial.println("SignalR Ping recibido."); // <--- CAMBIO Debug.println a Serial.println
+                }
+                // Puedes manejar otros tipos de mensajes SignalR si es necesario
             }
             break;
 
@@ -334,9 +325,9 @@ void sendSignalRInvocation(const char* targetMethod, JsonDocument& arguments) {
         return;
     }
 
-    StaticJsonDocument doc;
+    StaticJsonDocument doc; // Capacidad para el documento JSON
     doc["target"] = targetMethod;
-    doc["arguments"] = arguments;
+    doc["arguments"] = arguments; // JsonDocument pasada por referencia
     doc["type"] = 1; // Tipo de mensaje SignalR: 1 = Invocation
 
     String jsonMessage;
